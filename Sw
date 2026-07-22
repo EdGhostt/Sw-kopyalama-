@@ -56,7 +56,12 @@ def main():
     print(Fore.GREEN + "--- EdGhost Doğrulamalı Sunucu Klonlayıcı ---")
     
     token = input(Fore.YELLOW + "Discord Hesap Token'ınızı Girin: ").strip()
-    bot = commands.Bot(command_prefix='!', self_bot=True)
+    intents = discord.Intents.default()
+intents.message_content = True
+intents.guilds = True
+
+bot = commands.Bot(command_prefix='!', intents=intents, self_bot=True)
+
     
     @bot.event
     async def on_ready():
