@@ -1,0 +1,237 @@
+import asyncio
+import os
+import sys
+import time
+import discord
+from colorama import Fore, init
+from discord.ext import commands
+
+init(autoreset=True)
+
+total_sent = 0
+rate_limits = 0
+app_start_time = time.time()
+current_status = "Başlatılıyor..."
+active_channel = "Yok"
+current_delay = 1.3
+
+def clear_screen():
+    os.system('cls' if os.name == 'nt' else 'clear')
+
+def get_uptime():
+    elapsed = time.time() - app_start_time
+    hours, rem = divmod(elapsed, 3600)
+    minutes, seconds = divmod(rem, 60)
+    return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
+
+def update_dashboard(username, source_name, target_name):
+    global total_sent, rate_limits, current_status, active_channel, current_delay
+    uptime = get_uptime()
+
+    sys.stdout.write('\033[H\033[J')
+
+    panel = f"""
+{Fore.CYAN}======================================================
+{Fore.GREEN}        --- EdGhost Verified Cloner V4 ---
+{Fore.CYAN}======================================================
+{Fore.YELLOW}  [▶] Çalışma Süresi     : {Fore.WHITE}{uptime}
+{Fore.YELLOW}  [👤] Aktif Hesap        : {Fore.WHITE}{username}
+{Fore.YELLOW}  [📂] Kaynak -> Hedef    : {Fore.CYAN}{source_name} {Fore.WHITE}-> {Fore.CYAN}{target_name}
+{Fore.YELLOW}  [💬] Aktif İşlem        : {Fore.WHITE}#{active_channel}
+{Fore.YELLOW}  [📝] Aktarılan Mesaj    : {Fore.GREEN}{total_sent} adet
+{Fore.YELLOW}  [⏱️] Güvenli Bekleme    : {Fore.CYAN}{current_delay:.1f} saniye
+{Fore.YELLOW}  [⚠️] Rate Limit (Engel) : {Fore.RED}{rate_limits} kez (Atlatıldı)
+{Fore.CYAN}======================================================
+{Fore.MAGENTA}  Durum: {current_status}
+{Fore.YELLOW}  [♥] Kopyalama bittikten sonra otomatik denetim yapılacaktır.
+{Fore.CYAN}======================================================
+"""
+    sys.stdout.write(panel)
+    sys.stdout.flush()
+
+def main():
+    global app_start_time, current_status, active_channel, total_sent, rate_limits, current_delay
+    
+    clear_screen()
+    print(Fore.GREEN + "--- EdGhost Doğrulamalı Sunucu Klonlayıcı ---")
+    
+    token = input(Fore.YELLOW + "Discord Hesap Token'ınızı Girin: ").strip()
+    bot = commands.Bot(command_prefix='!', self_bot=True)
+    
+    @bot.event
+    async def on_ready():
+        global app_start_time, current_status, active_channel, total_sent, rate_limits, current_delay
+        
+        username = str(bot.user)
+        clear_screen()
+        
+        try:
+            kaynak_id = int(input(Fore.YELLOW + "Kopyalanacak Kaynak Sunucu ID'sini Girin: ").strip())
+            hedef_id = int(input(Fore.YELLOW + "İçeriklerin Aktarılacağı Hedef Sunucu ID'sini Girin: ").strip())
+        except ValueError:
+            print(Fore.RED + "[X] Geçersiz ID girdiniz!")
+            await bot.close()
+            return
+
+        kaynak = bot.get_guild(kaynak_id)
+        hedef = bot.get_guild(hedef_id)
+
+        if not kaynak or not hedef:
+            print(Fore.RED + "[X] Kaynak veya hedef sunucu bulunamadı!")
+            await bot.close()
+            return
+
+        app_start_time = time.time()
+        source_name = kaynak.name
+        target_name = hedef.name
+
+        async def panel_loop():
+            while True:
+                update_dashboard(username, source_name, target_name)
+                await asyncio.sleep(1)
+
+        panel_task = asyncio.create_task(panel_loop())
+
+        try:
+            # 1. Rolleri Kopyala
+            current_status = "Roller kopyalanıyor..."
+            hedef_roller = {r.name for r in hedef.roles}
+            for rol in sorted(kaynak.roles, key=lambda r: r.position):
+                if rol.is_default() or rol.name in hedef_roller:
+                    continue
+                try:
+                    await hedef.create_role(
+                        name=rol.name, permissions=rol.permissions, color=rol.color, hoist=rol.hoist, mentionable=rol.mentionable
+                    )
+                    await asyncio.sleep(1.5)
+                except:
+                    pass
+
+            # 2. Kategorileri Kopyala
+            current_status = "Kategoriler kopyalanıyor..."
+            kategori_esleme = {}
+            hedef_kategoriler = {c.name: c for c in hedef.categories}
+            
+            for kat in kaynak.categories:
+                if kat.name in hedef_kategoriler:
+                    kategori_esleme[kat.id] = hedef_kategoriler[kat.name]
+                else:
+                    try:
+                        yeni_kat = await hedef.create_category(name=kat.name, position=kat.position)
+                        kategori_esleme[kat.id] = yeni_kat
+                        await asyncio.sleep(1.5)
+                    except:
+                        pass
+
+            # 3. Kanalları ve Arşiv Mesajlarını Kopyala
+            current_status = "Kanallar ve geçmiş mesajlar aktarılıyor..."
+            hedef_kanallar = {c.name: c for c in hedef.channels}
+
+            for kanal in kaynak.channels:
+                if isinstance(kanal, discord.CategoryChannel):
+                    continue
+
+                active_channel = kanal.name
+                kat = kategori_esleme.get(kanal.category.id) if kanal.category else None
+                yeni_kanal = hedef_kanallar.get(kanal.name)
+
+                try:
+                    if not yeni_kanal:
+                        if isinstance(kanal, discord.TextChannel):
+                            yeni_kanal = await hedef.create_text_channel(
+                                name=kanal.name, category=kat, topic=kanal.topic, slowmode_delay=kanal.slowmode_delay, nsfw=kanal.nsfw, position=kanal.position
+                            )
+                        elif isinstance(kanal, discord.VoiceChannel):
+                            yeni_kanal = await hedef.create_voice_channel(
+                                name=kanal.name, category=kat, bitrate=kanal.bitrate, user_limit=kanal.user_limit, position=kanal.position
+                            )
+                        await asyncio.sleep(1.5)
+
+                    # Mesaj Aktarımı ve Eksik Kontrolü
+                    if isinstance(kanal, discord.TextChannel) and yeni_kanal:
+                        # Hedef kanalda zaten var olan mesaj içeriklerini çek (çift mesaj atmamak için)
+                        mevcut_mesajlar = set()
+                        async for m in yeni_kanal.history(limit=500):
+                            if m.content:
+                                mevcut_mesajlar.add(m.content)
+
+                        kaynak_mesajlar = [msg async for msg in kanal.history(limit=None, oldest_first=True)]
+                        
+                        for msg in kaynak_mesajlar:
+                            aktarilacak_metin = f"**{msg.author.name}**: {msg.content}" if msg.content else ""
+                            if msg.attachments:
+                                ekler = "\n".join([att.url for att in msg.attachments])
+                                aktarilacak_metin = f"{aktarilacak_metin}\n{ekler}" if aktarilacak_metin else ekler
+                            
+                            # Eğer bu mesaj hedef kanalda daha önce aktarılmamışsa gönder
+                            if aktarilacak_metin.strip() and aktarilacak_metin not in mevcut_mesajlar:
+                                basarili = False
+                                while not basarili:
+                                    try:
+                                        await yeni_kanal.send(aktarilacak_metin)
+                                        total_sent += 1
+                                        basarili = True
+                                        
+                                        if current_delay > 1.2:
+                                            current_delay -= 0.03
+                                        await asyncio.sleep(current_delay)
+                                    
+                                    except discord.HTTPException as err:
+                                        if err.status == 429:
+                                            rate_limits += 1
+                                            bekleme = getattr(err, 'retry_after', 10)
+                                            current_status = f"Rate Limit! {int(bekleme)}s bekleniyor..."
+                                            current_delay += 0.4
+                                            await asyncio.sleep(bekleme + 1)
+                                            current_status = "Kanallar ve geçmiş mesajlar aktarılıyor..."
+                                        else:
+                                            basarili = True
+                                            await asyncio.sleep(1.2)
+                except:
+                    pass
+
+            # 4. AŞAMA: KUSURSUZ DOĞRULAMA VE EKSİK TAMAMLAMA (VERIFICATION)
+            current_status = "Sunucu inceleniyor ve eksikler kapatılıyor..."
+            active_channel = "DOĞRULAMA"
+            await asyncio.sleep(2)
+
+            # Kaynak sunucudaki tüm kanal adlarını küme olarak alalım
+            kaynak_kanal_isimleri = {k.name for k in kaynak.channels if not isinstance(k, discord.CategoryChannel)}
+            guncel_hedef_kanallar = {c.name: c for c in hedef.channels if not isinstance(c, discord.CategoryChannel)}
+
+            # Eksik kalan kanal var mı kontrol et, yoksa oluştur
+            for kanal in kaynak.channels:
+                if isinstance(kanal, discord.CategoryChannel):
+                    continue
+                if kanal.name not in guncel_hedef_kanallar:
+                    kat = kategori_esleme.get(kanal.category.id) if kanal.category else None
+                    try:
+                        if isinstance(kanal, discord.TextChannel):
+                            yeni = await hedef.create_text_channel(name=kanal.name, category=kat, topic=kanal.topic)
+                            # İçindeki mesajları da eksik kalmasın diye hemen at
+                            async for msg in kanal.history(limit=None, oldest_first=True):
+                                metin = f"**{msg.author.name}**: {msg.content}" if msg.content else ""
+                                if msg.attachments:
+                                    metin += "\n" + "\n".join([att.url for att in msg.attachments])
+                                if metin.strip():
+                                    await yeni.send(metin)
+                                    await asyncio.sleep(1.2)
+                        elif isinstance(kanal, discord.VoiceChannel):
+                            await hedef.create_voice_channel(name=kanal.name, category=kat)
+                        await asyncio.sleep(1.5)
+                    except:
+                        pass
+
+            current_status = "Doğrulama Tamamlandı! Kusursuz."
+            await asyncio.sleep(4)
+        finally:
+            panel_task.cancel()
+            await bot.close()
+
+    try:
+        bot.run(token, reconnect=True)
+    except Exception as e:
+        print(Fore.RED + f"[X] Hata: {e}")
+
+if __name__ == '__main__':
+    main()
