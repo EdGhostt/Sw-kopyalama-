@@ -12,9 +12,8 @@ total_sent = 0
 rate_limits = 0
 app_start_time = time.time()
 current_status = "Başlatılıyor..."
-active_channel = "Yok"
-# Ban yememek için hızı düşürdük: Her mesaj arası 4.5 saniye (İnsan hızı)
-current_delay = 4.5 
+active_item = "Yok"
+current_delay = 4.5  # Ban yememek için güvenli bekleme
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -26,21 +25,21 @@ def get_uptime():
     return f"{int(hours):02d}:{int(minutes):02d}:{int(seconds):02d}"
 
 def update_dashboard(username, source_name, target_name):
-    global total_sent, rate_limits, current_status, active_channel, current_delay
+    global total_sent, rate_limits, current_status, active_item, current_delay
     uptime = get_uptime()
 
     sys.stdout.write('\033[H\033[J')
 
     panel = f"""
 {Fore.CYAN}======================================================
-{Fore.GREEN}   --- EdGhost %100 Güvenli & Anti-Ban Klonlayıcı ---
+{Fore.GREEN}   --- Kusursuz Sunucu Klonlayıcı (İsimsiz & Akıllı) ---
 {Fore.CYAN}======================================================
 {Fore.YELLOW}  [▶] Çalışma Süresi     : {Fore.WHITE}{uptime}
-{Fore.YELLOW}  [👤] Ana Hesap (Aktif)  : {Fore.WHITE}{username}
+{Fore.YELLOW}  [👤] Hesap (Aktif)      : {Fore.WHITE}{username}
 {Fore.YELLOW}  [📂] Kaynak -> Hedef    : {Fore.CYAN}{source_name} {Fore.WHITE}-> {Fore.CYAN}{target_name}
-{Fore.YELLOW}  [💬] Aktif Kanal        : {Fore.WHITE}#{active_channel}
-{Fore.YELLOW}  [📝] Aktarılan Mesaj    : {Fore.GREEN}{total_sent} adet
-{Fore.YELLOW}  [⏱️] Güvenli Bekleme    : {Fore.CYAN}{current_delay:.1f} saniye (Anti-Ban)
+{Fore.YELLOW}  [⚙️] İşlem Yapılan      : {Fore.WHITE}{active_item}
+{Fore.YELLOW}  [📝] Toplam Aktarılan   : {Fore.GREEN}{total_sent} mesaj
+{Fore.YELLOW}  [⏱️] Güvenli Bekleme    : {Fore.CYAN}{current_delay:.1f} saniye
 {Fore.YELLOW}  [⚠️] Rate Limit (Engel) : {Fore.RED}{rate_limits} kez
 {Fore.CYAN}======================================================
 {Fore.MAGENTA}  Durum: {current_status}
@@ -50,21 +49,21 @@ def update_dashboard(username, source_name, target_name):
     sys.stdout.flush()
 
 def main():
-    global app_start_time, current_status, active_channel, total_sent, rate_limits, current_delay
+    global app_start_time, current_status, active_item, total_sent, rate_limits, current_delay
     
     clear_screen()
-    print(Fore.GREEN + "--- Güvenli Mod Klonlayıcı Başlatılıyor ---")
+    print(Fore.GREEN + "--- Tam Sunucu Klonlayıcı Başlatılıyor ---")
     
-    token = input(Fore.YELLOW + "Ana Hesap Discord Token'ını Girin: ").strip().strip('"').strip("'")
+    token = input(Fore.YELLOW + "Discord Token'ını Girin: ").strip().strip('"').strip("'")
     headers = {
         "Authorization": token,
         "Content-Type": "application/json"
     }
 
-    current_status = "Ana hesap doğrulanıyor..."
+    current_status = "Hesap doğrulanıyor..."
     user_res = requests.get(f"{API_BASE}/users/@me", headers=headers)
     if user_res.status_code != 200:
-        print(Fore.RED + "[X] Hata: Token geçersiz veya hala banlı!")
+        print(Fore.RED + "[X] Hata: Token geçersiz veya banlı!")
         return
 
     user_data = user_res.json()
@@ -72,7 +71,7 @@ def main():
 
     try:
         kaynak_id = input(Fore.YELLOW + "Kaynak Sunucu ID'si: ").strip()
-        hedef_id = input(Fore.YELLOW + "Hedef Sunucu ID'si: ").strip()
+        hedef_id = input(Fore.YELLOW + "Hedef Sunucu ID'si (Boşaltılmış olmalı): ").strip()
     except ValueError:
         print(Fore.RED + "[X] Geçersiz ID!")
         return
@@ -85,8 +84,8 @@ def main():
 
     app_start_time = time.time()
 
-    # 1. ROLLERİ KOPYALA (Güvenli aralıklarla)
-    current_status = "Roller güvenli şekilde kopyalanıyor..."
+    # 1. ROLLERİ KOPYALA (Var olanları atlar)
+    current_status = "Roller kontrol ediliyor ve kopyalanıyor..."
     update_dashboard(username, source_name, target_name)
 
     roller_res = requests.get(f"{API_BASE}/guilds/{kaynak_id}/roles", headers=headers)
@@ -103,6 +102,7 @@ def main():
             if rol['managed'] or rol['name'] == "@everyone":
                 continue
             
+            active_item = f"Rol: {rol['name']}"
             if rol['name'] not in hedef_rol_dict:
                 payload = {
                     "name": rol['name'],
@@ -112,10 +112,11 @@ def main():
                     "mentionable": rol['mentionable']
                 }
                 requests.post(f"{API_BASE}/guilds/{hedef_id}/roles", headers=headers, json=payload)
-                time.sleep(1.5) # Roller arası güvenli bekleme
+                time.sleep(1.0)
+            update_dashboard(username, source_name, target_name)
 
-    # 2. KANALLARI KONTROL ET VE OLUŞTUR
-    current_status = "Kanallar ve kategoriler kontrol ediliyor..."
+    # 2. KATEGORİLERİ KOPYALA
+    current_status = "Kategoriler kontrol ediliyor..."
     update_dashboard(username, source_name, target_name)
     
     hedef_kanallar_res = requests.get(f"{API_BASE}/guilds/{hedef_id}/channels", headers=headers)
@@ -136,6 +137,7 @@ def main():
     kat_esleme = {}
 
     for kat in kategoriler:
+        active_item = f"Kategori: {kat['name']}"
         if kat['name'] in hedef_kanal_dict:
             kat_esleme[kat['id']] = hedef_kanal_dict[kat['name']]
         else:
@@ -146,13 +148,16 @@ def main():
                 kat_esleme[kat['id']] = yeni_kat['id']
                 hedef_kanal_dict[kat['name']] = yeni_kat['id']
             time.sleep(1.0)
+        update_dashboard(username, source_name, target_name)
 
+    # 3. KANALLARI KOPYALA
+    current_status = "Kanallar kontrol ediliyor..."
     diger_kanallar = [c for c in kanallar if c['type'] != 4]
     diger_kanallar.sort(key=lambda x: x.get('position', 0))
     kanal_esleme = {}
 
     for kanal in diger_kanallar:
-        active_channel = kanal['name']
+        active_item = f"Kanal: {kanal['name']}"
         if kanal['name'] in hedef_kanal_dict:
             kanal_esleme[kanal['id']] = hedef_kanal_dict[kanal['name']]
         else:
@@ -173,35 +178,54 @@ def main():
             if res.status_code == 201:
                 yeni_k = res.json()
                 kanal_esleme[kanal['id']] = yeni_k['id']
+                hedef_kanal_dict[kanal['name']] = yeni_k['id']
             time.sleep(1.0)
         
         update_dashboard(username, source_name, target_name)
 
-    # 3. MESAJLARI İNSAN HIZINDA (GÜVENLİ) AKTAR (Kaldığı Yerden)
-    current_status = "Mesajlar güvenli modda aktarılıyor..."
+    # 4. METİN KANALLARININ MESAJLARINI AKTAR (İsimsiz & Kaldığı Yerden)
+    current_status = "Mesajlar isimsiz olarak aktarılıyor..."
     for kanal in diger_kanallar:
-        if kanal['type'] == 0:  # Metin Kanalları
-            active_channel = kanal['name']
+        if kanal['type'] == 0:  # Sadece Metin Kanalları
             kaynak_kanal_id = kanal['id']
             hedef_kanal_id = kanal_esleme.get(kanal['id']) or hedef_kanal_dict.get(kanal['name'])
             
             if not hedef_kanal_id:
                 continue
 
-            hedef_eski_mesajlar = set()
-            hedef_hist = requests.get(f"{API_BASE}/channels/{hedef_kanal_id}/messages?limit=50", headers=headers)
-            if hedef_hist.status_code == 200:
-                for hm in hedef_hist.json():
-                    if hm.get('content'):
-                        hedef_eski_mesajlar.add(hm['content'])
+            active_item = f"Mesajlar: #{kanal['name']}"
+            update_dashboard(username, source_name, target_name)
 
+            # Hedef kanalda önceden yazılmış mesajları topla (Tekrarı önlemek için)
+            hedef_eski_mesajlar = set()
+            after_id = None
+            while True:
+                hist_url = f"{API_BASE}/channels/{hedef_kanal_id}/messages?limit=100"
+                if after_id:
+                    hist_url += f"&after={after_id}"
+                hedef_hist = requests.get(hist_url, headers=headers)
+                if hedef_hist.status_code == 200:
+                    msgs = hedef_hist.json()
+                    if not msgs:
+                        break
+                    for hm in msgs:
+                        if hm.get('content'):
+                            hedef_eski_mesajlar.add(hm['content'])
+                    if len(msgs) < 100:
+                        break
+                    after_id = msgs[-1]['id']
+                else:
+                    break
+
+            # Kaynaktan mesajları al
             msg_res = requests.get(f"{API_BASE}/channels/{kaynak_kanal_id}/messages?limit=100", headers=headers)
             if msg_res.status_code == 200:
                 mesajlar = msg_res.json()
-                mesajlar.reverse()
+                mesajlar.reverse()  # Eskiden yeniye
 
                 for msg in mesajlar:
-                    icerik = f"**{msg['author']['username']}**: {msg['content']}" if msg['content'] else ""
+                    # Sadece mesaj içeriği alınır, isim kesinlikle yazılmaz!
+                    icerik = msg.get('content', '')
 
                     if icerik.strip() and icerik not in hedef_eski_mesajlar:
                         basarili = False
@@ -209,24 +233,24 @@ def main():
                             send_res = requests.post(f"{API_BASE}/channels/{hedef_kanal_id}/messages", headers=headers, json={"content": icerik})
                             if send_res.status_code == 201:
                                 total_sent += 1
+                                hedef_eski_mesajlar.add(icerik)
                                 basarili = True
                             elif send_res.status_code == 429:
                                 rate_limits += 1
                                 retry_after = send_res.json().get('retry_after', 10)
-                                current_status = f"Rate Limit! Güvenlik için {int(retry_after)}s bekleniyor..."
+                                current_status = f"Rate Limit! {int(retry_after)}s bekleniyor..."
                                 update_dashboard(username, source_name, target_name)
                                 time.sleep(retry_after + 3)
-                                current_status = "Mesajlar güvenli modda aktarılıyor..."
+                                current_status = "Mesajlar isimsiz olarak aktarılıyor..."
                             else:
                                 basarili = True
                             
                             update_dashboard(username, source_name, target_name)
-                            # Kesinlikle ban yememek için mesajlar arası 4.5 saniye insan hızı bekletme
                             time.sleep(current_delay)
 
-    current_status = "İŞLEM TAMAMLANDI! Hiçbir risk almadan bitti."
+    current_status = "İŞLEM TAMAMLANDI! Her şey kusursuz aktarıldı."
     update_dashboard(username, source_name, target_name)
-    print(Fore.GREEN + "\n\n[✔] İşlem başarıyla ve güvenle tamamlandı!")
+    print(Fore.GREEN + "\n\n[✔] Sunucu tamamen klonlandı, mesajlar isimsiz olarak aktarıldı!")
 
 if __name__ == '__main__':
     main()
