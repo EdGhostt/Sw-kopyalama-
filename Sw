@@ -13,8 +13,7 @@ rate_limits = 0
 app_start_time = time.time()
 current_status = "Başlatılıyor..."
 active_channel = "Yok"
-# 1 saniyede 1 mesaj atması için gecikmeyi tam 1.0 saniye yaptık
-current_delay = 1.0 
+current_delay = 1.0  # Tam 1 saniye aralık
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -33,14 +32,14 @@ def update_dashboard(username, source_name, target_name):
 
     panel = f"""
 {Fore.CYAN}======================================================
-{Fore.GREEN}    --- EdGhost Seri Mod (1 Sn / 1 Mesaj) ---
+{Fore.GREEN}   --- 2 Hesaplı Seri Klonlayıcı (1 Sn / Mesaj) ---
 {Fore.CYAN}======================================================
 {Fore.YELLOW}  [▶] Çalışma Süresi     : {Fore.WHITE}{uptime}
-{Fore.YELLOW}  [👤] Hesap (Aktif)      : {Fore.WHITE}{username}
+{Fore.YELLOW}  [👤] Yazma Hesabı       : {Fore.WHITE}{username}
 {Fore.YELLOW}  [📂] Kaynak -> Hedef    : {Fore.CYAN}{source_name} {Fore.WHITE}-> {Fore.CYAN}{target_name}
-{Fore.YELLOW}  [💬] Aktif Kanal        : {Fore.WHITE}#{active_channel}
+{Fore.YELLOW}  [💬] Aktif İşlem        : {Fore.WHITE}#{active_channel}
 {Fore.YELLOW}  [📝] Aktarılan Mesaj    : {Fore.GREEN}{total_sent} adet
-{Fore.YELLOW}  [⏱️] Bekleme Süresi     : {Fore.CYAN}{current_delay:.1f} saniye (Seri)
+{Fore.YELLOW}  [⏱️] Bekleme Süresi     : {Fore.CYAN}{current_delay:.1f} saniye
 {Fore.YELLOW}  [⚠️] Rate Limit (Engel) : {Fore.RED}{rate_limits} kez
 {Fore.CYAN}======================================================
 {Fore.MAGENTA}  Durum: {current_status}
@@ -53,22 +52,29 @@ def main():
     global app_start_time, current_status, active_channel, total_sent, rate_limits, current_delay
     
     clear_screen()
-    print(Fore.GREEN + "--- Seri Klonlayıcı Başlatılıyor ---")
+    print(Fore.GREEN + "--- 2 Hesaplı Sistem Başlatılıyor ---")
     
-    token = input(Fore.YELLOW + "Discord Token'ını Girin: ").strip().strip('"').strip("'")
-    headers = {
-        "Authorization": token,
-        "Content-Type": "application/json"
-    }
+    # 1. Aşama: Okuma yapacak hesap
+    read_token = input(Fore.YELLOW + "1. Kaynaktan OKUYACAK Token (1. Hesap): ").strip().strip('"').strip("'")
+    read_headers = {"Authorization": read_token, "Content-Type": "application/json"}
 
-    current_status = "Hesap doğrulanıyor..."
-    user_res = requests.get(f"{API_BASE}/users/@me", headers=headers)
-    if user_res.status_code != 200:
-        print(Fore.RED + "[X] Hata: Token geçersiz!")
+    test_read = requests.get(f"{API_BASE}/users/@me", headers=read_headers)
+    if test_read.status_code != 200:
+        print(Fore.RED + "[X] Hata: 1. Hesap tokeni geçersiz!")
         return
+    print(Fore.GREEN + "[✔] Okuma hesabı doğrulandı.")
 
-    user_data = user_res.json()
-    username = f"{user_data.get('username')}#{user_data.get('discriminator', '0')}"
+    # 2. Aşama: Yazma yapacak hesap
+    write_token = input(Fore.YELLOW + "2. Hedefe YAZACAK Token (2. Hesap): ").strip().strip('"').strip("'")
+    write_headers = {"Authorization": write_token, "Content-Type": "application/json"}
+
+    test_write = requests.get(f"{API_BASE}/users/@me", headers=write_headers)
+    if test_write.status_code != 200:
+        print(Fore.RED + "[X] Hata: 2. Hesap tokeni geçersiz!")
+        return
+    
+    writer_data = test_write.json()
+    username = f"{writer_data.get('username')}#{writer_data.get('discriminator', '0')}"
 
     try:
         kaynak_id = input(Fore.YELLOW + "Kaynak Sunucu ID'si: ").strip()
@@ -77,20 +83,20 @@ def main():
         print(Fore.RED + "[X] Geçersiz ID!")
         return
 
-    src_guild = requests.get(f"{API_BASE}/guilds/{kaynak_id}", headers=headers).json()
-    tgt_guild = requests.get(f"{API_BASE}/guilds/{hedef_id}", headers=headers).json()
+    src_guild = requests.get(f"{API_BASE}/guilds/{kaynak_id}", headers=read_headers).json()
+    tgt_guild = requests.get(f"{API_BASE}/guilds/{hedef_id}", headers=write_headers).json()
     
     source_name = src_guild.get("name", "Kaynak")
     target_name = tgt_guild.get("name", "Hedef")
 
     app_start_time = time.time()
 
-    # 1. ROLLERİ KOPYALA
+    # 1. ROLLERİ KOPYALA (Yazma hesabı ile)
     current_status = "Roller kopyalanıyor..."
     update_dashboard(username, source_name, target_name)
 
-    roller_res = requests.get(f"{API_BASE}/guilds/{kaynak_id}/roles", headers=headers)
-    hedef_roller_res = requests.get(f"{API_BASE}/guilds/{hedef_id}/roles", headers=headers)
+    roller_res = requests.get(f"{API_BASE}/guilds/{kaynak_id}/roles", headers=read_headers)
+    hedef_roller_res = requests.get(f"{API_BASE}/guilds/{hedef_id}/roles", headers=write_headers)
     
     hedef_rol_dict = {}
     if hedef_roller_res.status_code == 200:
@@ -111,20 +117,20 @@ def main():
                     "hoist": rol['hoist'],
                     "mentionable": rol['mentionable']
                 }
-                requests.post(f"{API_BASE}/guilds/{hedef_id}/roles", headers=headers, json=payload)
+                requests.post(f"{API_BASE}/guilds/{hedef_id}/roles", headers=write_headers, json=payload)
                 time.sleep(0.5)
 
     # 2. KANALLARI KONTROL ET VE OLUŞTUR
     current_status = "Kanallar ve kategoriler kontrol ediliyor..."
     update_dashboard(username, source_name, target_name)
     
-    hedef_kanallar_res = requests.get(f"{API_BASE}/guilds/{hedef_id}/channels", headers=headers)
+    hedef_kanallar_res = requests.get(f"{API_BASE}/guilds/{hedef_id}/channels", headers=write_headers)
     hedef_kanal_dict = {}
     if hedef_kanallar_res.status_code == 200:
         for c in hedef_kanallar_res.json():
             hedef_kanal_dict[c['name']] = c['id']
 
-    kaynak_kanallar_res = requests.get(f"{API_BASE}/guilds/{kaynak_id}/channels", headers=headers)
+    kaynak_kanallar_res = requests.get(f"{API_BASE}/guilds/{kaynak_id}/channels", headers=read_headers)
     if kaynak_kanallar_res.status_code != 200:
         print(Fore.RED + "[X] Kaynak kanalları okunamadı!")
         return
@@ -140,7 +146,7 @@ def main():
             kat_esleme[kat['id']] = hedef_kanal_dict[kat['name']]
         else:
             payload = {"name": kat['name'], "type": 4, "position": kat.get('position', 0)}
-            res = requests.post(f"{API_BASE}/guilds/{hedef_id}/channels", headers=headers, json=payload)
+            res = requests.post(f"{API_BASE}/guilds/{hedef_id}/channels", headers=write_headers, json=payload)
             if res.status_code == 201:
                 yeni_kat = res.json()
                 kat_esleme[kat['id']] = yeni_kat['id']
@@ -169,7 +175,7 @@ def main():
             if kanal.get('parent_id') and kanal['parent_id'] in kat_esleme:
                 payload["parent_id"] = kat_esleme[kanal['parent_id']]
 
-            res = requests.post(f"{API_BASE}/guilds/{hedef_id}/channels", headers=headers, json=payload)
+            res = requests.post(f"{API_BASE}/guilds/{hedef_id}/channels", headers=write_headers, json=payload)
             if res.status_code == 201:
                 yeni_k = res.json()
                 kanal_esleme[kanal['id']] = yeni_k['id']
@@ -177,7 +183,7 @@ def main():
         
         update_dashboard(username, source_name, target_name)
 
-    # 3. MESAJLARI 1 SANİYE ARAYLA AKTAR (Kaldığı Yerden)
+    # 3. MESAJLARI 1 SN ARAYLA AKTAR (Okuma: 1. Hesap, Yazma: 2. Hesap - Kaldığı Yerden)
     current_status = "Mesajlar 1 sn arayla aktarılıyor..."
     for kanal in diger_kanallar:
         if kanal['type'] == 0:  # Metin Kanalları
@@ -189,13 +195,14 @@ def main():
                 continue
 
             hedef_eski_mesajlar = set()
-            hedef_hist = requests.get(f"{API_BASE}/channels/{hedef_kanal_id}/messages?limit=50", headers=headers)
+            hedef_hist = requests.get(f"{API_BASE}/channels/{hedef_kanal_id}/messages?limit=50", headers=write_headers)
             if hedef_hist.status_code == 200:
                 for hm in hedef_hist.json():
                     if hm.get('content'):
                         hedef_eski_mesajlar.add(hm['content'])
 
-            msg_res = requests.get(f"{API_BASE}/channels/{kaynak_kanal_id}/messages?limit=100", headers=headers)
+            # Okuma 1. hesapla
+            msg_res = requests.get(f"{API_BASE}/channels/{kaynak_kanal_id}/messages?limit=100", headers=read_headers)
             if msg_res.status_code == 200:
                 mesajlar = msg_res.json()
                 mesajlar.reverse()
@@ -206,7 +213,8 @@ def main():
                     if icerik.strip() and icerik not in hedef_eski_mesajlar:
                         basarili = False
                         while not basarili:
-                            send_res = requests.post(f"{API_BASE}/channels/{hedef_kanal_id}/messages", headers=headers, json={"content": icerik})
+                            # Yazma 2. hesapla
+                            send_res = requests.post(f"{API_BASE}/channels/{hedef_kanal_id}/messages", headers=write_headers, json={"content": icerik})
                             if send_res.status_code == 201:
                                 total_sent += 1
                                 basarili = True
@@ -221,10 +229,9 @@ def main():
                                 basarili = True
                             
                             update_dashboard(username, source_name, target_name)
-                            # Tam 1 saniye bekleme aralığı
                             time.sleep(current_delay)
 
-    current_status = "İŞLEM TAMAMLANDI! Her şey hızlıca aktarıldı."
+    current_status = "İŞLEM TAMAMLANDI! 2 hesapla kusursuz aktarıldı."
     update_dashboard(username, source_name, target_name)
     print(Fore.GREEN + "\n\n[✔] İşlem başarıyla tamamlandı!")
 
