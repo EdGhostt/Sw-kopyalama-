@@ -31,7 +31,7 @@ def update_dashboard(username, source_name, target_name):
 
     panel = f"""
 {Fore.CYAN}======================================================
-{Fore.GREEN}    --- Empire Yükseliş | EdGhost Cloner V8 ---
+{Fore.GREEN}    --- Empire Yükseliş | EdGhost Cloner V9 ---
 {Fore.CYAN}======================================================
 {Fore.YELLOW}  [▶] Çalışma Süresi     : {Fore.WHITE}{uptime}
 {Fore.YELLOW}  [👤] Aktif Hesap        : {Fore.WHITE}{username}
@@ -42,13 +42,12 @@ def update_dashboard(username, source_name, target_name):
 {Fore.YELLOW}  [⚠️] Rate Limit (Engel) : {Fore.RED}{rate_limits} kez
 {Fore.CYAN}======================================================
 {Fore.MAGENTA}  Durum: {current_status}
-{Fore.YELLOW}  [♥] Token Bypass ve Otomatik Senkronizasyon Aktif.
 {Fore.CYAN}======================================================
 """
     sys.stdout.write(panel)
     sys.stdout.flush()
 
-async def main():
+def main():
     global app_start_time, current_status, active_channel, total_sent, rate_limits, current_delay
     
     clear_screen()
@@ -56,11 +55,7 @@ async def main():
     
     token = input(Fore.YELLOW + "Discord Hesap Token'ınızı Girin: ").strip().strip('"').strip("'")
 
-    intents = discord.Intents.default()
-    intents.message_content = True
-    intents.guilds = True
-
-    client = discord.Client(intents=intents, self_bot=True)
+    client = discord.Client()
 
     @client.event
     async def on_ready():
@@ -81,7 +76,7 @@ async def main():
         hedef = client.get_guild(hedef_id)
 
         if not kaynak or not hedef:
-            print(Fore.RED + "[X] Kaynak veya hedef sunucu bulunamadı! Botun her iki sunucuda da olduğuna emin olun.")
+            print(Fore.RED + "[X] Kaynak veya hedef sunucu bulunamadı!")
             await client.close()
             return
 
@@ -188,32 +183,6 @@ async def main():
                 except:
                     pass
 
-            current_status = "Sunucu inceleniyor ve eksikler kapatılıyor..."
-            active_channel = "DOĞRULAMA"
-            await asyncio.sleep(2)
-
-            for kanal in kaynak.channels:
-                if isinstance(kanal, discord.CategoryChannel):
-                    continue
-                guncel_hedef_kanallar = {c.name: c for c in hedef.channels if not isinstance(c, discord.CategoryChannel)}
-                if kanal.name not in guncel_hedef_kanallar:
-                    kat = kategori_esleme.get(kanal.category.id) if kanal.category else None
-                    try:
-                        if isinstance(kanal, discord.TextChannel):
-                            yeni = await hedef.create_text_channel(name=kanal.name, category=kat, topic=kanal.topic)
-                            async for msg in kanal.history(limit=None, oldest_first=True):
-                                metin = f"**{msg.author.name}**: {msg.content}" if msg.content else ""
-                                if msg.attachments:
-                                    metin += "\n" + "\n".join([att.url for att in msg.attachments])
-                                if metin.strip():
-                                    await yeni.send(metin)
-                                    await asyncio.sleep(1.2)
-                        elif isinstance(kanal, discord.VoiceChannel):
-                            await hedef.create_voice_channel(name=kanal.name, category=kat)
-                        await asyncio.sleep(1.5)
-                    except:
-                        pass
-
             current_status = "İşlem Tamamlandı! Sunucu Kusursuz Kopyalandı."
             await asyncio.sleep(5)
         finally:
@@ -221,9 +190,9 @@ async def main():
             await client.close()
 
     try:
-        await client.start(token, bot=False)
+        client.run(token)
     except Exception as e:
-        print(Fore.RED + f"[X] Bağlantı Hatası: {e}")
+        print(Fore.RED + f"[X] Hata: {e}")
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
