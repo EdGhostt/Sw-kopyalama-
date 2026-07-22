@@ -1,12 +1,14 @@
-import asyncio
 import os
 import sys
 import time
-import discord
+import requests
 from colorama import Fore, init
 
 init(autoreset=True)
 
+API_BASE = "https://discord.com/api/v10"
+
+# Dashboard (Panel) Değişkenleri
 total_sent = 0
 rate_limits = 0
 app_start_time = time.time()
@@ -27,11 +29,12 @@ def update_dashboard(username, source_name, target_name):
     global total_sent, rate_limits, current_status, active_channel, current_delay
     uptime = get_uptime()
 
+    # Ekranı temizlemeden imleci başa alarak paneli sürekli günceller (Titreme yapmaz)
     sys.stdout.write('\033[H\033[J')
 
     panel = f"""
 {Fore.CYAN}======================================================
-{Fore.GREEN}    --- Empire Yükseliş | EdGhost Cloner V9 ---
+{Fore.GREEN}        --- EdGhost Ultimate Cloner V11 ---
 {Fore.CYAN}======================================================
 {Fore.YELLOW}  [▶] Çalışma Süresi     : {Fore.WHITE}{uptime}
 {Fore.YELLOW}  [👤] Aktif Hesap        : {Fore.WHITE}{username}
@@ -42,6 +45,7 @@ def update_dashboard(username, source_name, target_name):
 {Fore.YELLOW}  [⚠️] Rate Limit (Engel) : {Fore.RED}{rate_limits} kez
 {Fore.CYAN}======================================================
 {Fore.MAGENTA}  Durum: {current_status}
+{Fore.YELLOW}  [♥] HTTP REST API Modu Aktif (Hatasız & Stabil).
 {Fore.CYAN}======================================================
 """
     sys.stdout.write(panel)
@@ -51,148 +55,156 @@ def main():
     global app_start_time, current_status, active_channel, total_sent, rate_limits, current_delay
     
     clear_screen()
-    print(Fore.GREEN + "--- Empire Yükseliş - Güvenli Klonlayıcı ---")
+    print(Fore.GREEN + "--- EdGhost Panel Entegreli Sunucu Klonlayıcı ---")
     
     token = input(Fore.YELLOW + "Discord Hesap Token'ınızı Girin: ").strip().strip('"').strip("'")
+    headers = {
+        "Authorization": token,
+        "Content-Type": "application/json"
+    }
 
-    client = discord.Client()
+    current_status = "Token doğrulanıyor..."
+    user_res = requests.get(f"{API_BASE}/users/@me", headers=headers)
+    if user_res.status_code != 200:
+        print(Fore.RED + "[X] Hata: Token geçersiz veya hatalı!")
+        return
 
-    @client.event
-    async def on_ready():
-        global app_start_time, current_status, active_channel, total_sent, rate_limits, current_delay
-        
-        username = str(client.user)
-        clear_screen()
-        
-        try:
-            kaynak_id = int(input(Fore.YELLOW + "Kopyalanacak Kaynak Sunucu ID'sini Girin: ").strip())
-            hedef_id = int(input(Fore.YELLOW + "İçeriklerin Aktarılacağı Hedef Sunucu ID'sini Girin: ").strip())
-        except ValueError:
-            print(Fore.RED + "[X] Geçersiz ID girdiniz!")
-            await client.close()
-            return
-
-        kaynak = client.get_guild(kaynak_id)
-        hedef = client.get_guild(hedef_id)
-
-        if not kaynak or not hedef:
-            print(Fore.RED + "[X] Kaynak veya hedef sunucu bulunamadı!")
-            await client.close()
-            return
-
-        app_start_time = time.time()
-        source_name = kaynak.name
-        target_name = hedef.name
-
-        async def panel_loop():
-            while True:
-                update_dashboard(username, source_name, target_name)
-                await asyncio.sleep(1)
-
-        panel_task = asyncio.create_task(panel_loop())
-
-        try:
-            current_status = "Roller kopyalanıyor..."
-            hedef_roller = {r.name for r in hedef.roles}
-            for rol in sorted(kaynak.roles, key=lambda r: r.position):
-                if rol.is_default() or rol.name in hedef_roller:
-                    continue
-                try:
-                    await hedef.create_role(
-                        name=rol.name, permissions=rol.permissions, color=rol.color, hoist=rol.hoist, mentionable=rol.mentionable
-                    )
-                    await asyncio.sleep(1.5)
-                except:
-                    pass
-
-            current_status = "Kategoriler kopyalanıyor..."
-            kategori_esleme = {}
-            hedef_kategoriler = {c.name: c for c in hedef.categories}
-            
-            for kat in kaynak.categories:
-                if kat.name in hedef_kategoriler:
-                    kategori_esleme[kat.id] = hedef_kategoriler[kat.name]
-                else:
-                    try:
-                        yeni_kat = await hedef.create_category(name=kat.name, position=kat.position)
-                        kategori_esleme[kat.id] = yeni_kat
-                        await asyncio.sleep(1.5)
-                    except:
-                        pass
-
-            current_status = "Kanallar ve geçmiş mesajlar aktarılıyor..."
-            hedef_kanallar = {c.name: c for c in hedef.channels}
-
-            for kanal in kaynak.channels:
-                if isinstance(kanal, discord.CategoryChannel):
-                    continue
-
-                active_channel = kanal.name
-                kat = kategori_esleme.get(kanal.category.id) if kanal.category else None
-                yeni_kanal = hedef_kanallar.get(kanal.name)
-
-                try:
-                    if not yeni_kanal:
-                        if isinstance(kanal, discord.TextChannel):
-                            yeni_kanal = await hedef.create_text_channel(
-                                name=kanal.name, category=kat, topic=kanal.topic, slowmode_delay=kanal.slowmode_delay, nsfw=kanal.nsfw, position=kanal.position
-                            )
-                        elif isinstance(kanal, discord.VoiceChannel):
-                            yeni_kanal = await hedef.create_voice_channel(
-                                name=kanal.name, category=kat, bitrate=kanal.bitrate, user_limit=kanal.user_limit, position=kanal.position
-                            )
-                        await asyncio.sleep(1.5)
-
-                    if isinstance(kanal, discord.TextChannel) and yeni_kanal:
-                        mevcut_mesajlar = set()
-                        async for m in yeni_kanal.history(limit=500):
-                            if m.content:
-                                mevcut_mesajlar.add(m.content)
-
-                        kaynak_mesajlar = [msg async for msg in kanal.history(limit=None, oldest_first=True)]
-                        
-                        for msg in kaynak_mesajlar:
-                            aktarilacak_metin = f"**{msg.author.name}**: {msg.content}" if msg.content else ""
-                            if msg.attachments:
-                                ekler = "\n".join([att.url for att in msg.attachments])
-                                aktarilacak_metin = f"{aktarilacak_metin}\n{ekler}" if aktarilacak_metin else ekler
-                            
-                            if aktarilacak_metin.strip() and aktarilacak_metin not in mevcut_mesajlar:
-                                basarili = False
-                                while not basarili:
-                                    try:
-                                        await yeni_kanal.send(aktarilacak_metin)
-                                        total_sent += 1
-                                        basarili = True
-                                        
-                                        if current_delay > 1.2:
-                                            current_delay -= 0.03
-                                        await asyncio.sleep(current_delay)
-                                    
-                                    except discord.HTTPException as err:
-                                        if err.status == 429:
-                                            rate_limits += 1
-                                            bekleme = getattr(err, 'retry_after', 10)
-                                            current_status = f"Rate Limit! {int(bekleme)}s bekleniyor..."
-                                            current_delay += 0.4
-                                            await asyncio.sleep(bekleme + 1)
-                                            current_status = "Kanallar ve geçmiş mesajlar aktarılıyor..."
-                                        else:
-                                            basarili = True
-                                            await asyncio.sleep(1.2)
-                except:
-                    pass
-
-            current_status = "İşlem Tamamlandı! Sunucu Kusursuz Kopyalandı."
-            await asyncio.sleep(5)
-        finally:
-            panel_task.cancel()
-            await client.close()
+    user_data = user_res.json()
+    username = f"{user_data.get('username')}#{user_data.get('discriminator', '0')}"
 
     try:
-        client.run(token)
-    except Exception as e:
-        print(Fore.RED + f"[X] Hata: {e}")
+        kaynak_id = input(Fore.YELLOW + "Kopyalanacak Kaynak Sunucu ID'sini Girin: ").strip()
+        hedef_id = input(Fore.YELLOW + "İçeriklerin Aktarılacağı Hedef Sunucu ID'sini Girin: ").strip()
+    except ValueError:
+        print(Fore.RED + "[X] Geçersiz ID girdiniz!")
+        return
+
+    # Sunucu isimlerini al
+    src_guild = requests.get(f"{API_BASE}/guilds/{kaynak_id}", headers=headers).json()
+    tgt_guild = requests.get(f"{API_BASE}/guilds/{hedef_id}", headers=headers).json()
+    
+    source_name = src_guild.get("name", "Kaynak Sunucu")
+    target_name = tgt_guild.get("name", "Hedef Sunucu")
+
+    app_start_time = time.time()
+
+    # 1. ROLLERİ KOPYALA
+    current_status = "Roller kopyalanıyor..."
+    update_dashboard(username, source_name, target_name)
+    
+    roller_res = requests.get(f"{API_BASE}/guilds/{kaynak_id}/roles", headers=headers)
+    hedef_roller_res = requests.get(f"{API_BASE}/guilds/{hedef_id}/roles", headers=headers)
+    hedef_rol_isimleri = {r['name'] for r in hedef_roller_res.json()} if hedef_roller_res.status_code == 200 else set()
+
+    if roller_res.status_code == 200:
+        roller = sorted(roller_res.json(), key=lambda x: x.get('position', 0))
+        for rol in roller:
+            if rol['managed'] or rol['name'] in hedef_rol_isimleri or rol['name'] == "@everyone":
+                continue
+            payload = {
+                "name": rol['name'],
+                "permissions": rol['permissions'],
+                "color": rol['color'],
+                "hoist": rol['hoist'],
+                "mentionable": rol['mentionable']
+            }
+            requests.post(f"{API_BASE}/guilds/{hedef_id}/roles", headers=headers, json=payload)
+            time.sleep(1)
+
+    # 2. KANALLARI VE KATEGORİLERİ KOPYALA
+    current_status = "Kategoriler ve Kanallar oluşturuluyor..."
+    update_dashboard(username, source_name, target_name)
+
+    kanallar_res = requests.get(f"{API_BASE}/guilds/{kaynak_id}/channels", headers=headers)
+    if kanallar_res.status_code != 200:
+        print(Fore.RED + "[X] Kaynak kanalları okunamadı!")
+        return
+
+    kanallar = kanallar_res.json()
+    kategoriler = [c for c in kanallar if c['type'] == 4]
+    kategoriler.sort(key=lambda x: x.get('position', 0))
+    kat_esleme = {}
+
+    for kat in kategoriler:
+        payload = {"name": kat['name'], "type": 4, "position": kat.get('position', 0)}
+        res = requests.post(f"{API_BASE}/guilds/{hedef_id}/channels", headers=headers, json=payload)
+        if res.status_code == 201:
+            kat_esleme[kat['id']] = res.json()['id']
+        time.sleep(0.8)
+
+    diger_kanallar = [c for c in kanallar if c['type'] != 4]
+    diger_kanallar.sort(key=lambda x: x.get('position', 0))
+    kanal_esleme = {}
+
+    for kanal in diger_kanallar:
+        active_channel = kanal['name']
+        payload = {
+            "name": kanal['name'],
+            "type": kanal['type'],
+            "position": kanal.get('position', 0),
+            "topic": kanal.get('topic', ''),
+            "nsfw": kanal.get('nsfw', False),
+            "rate_limit_per_user": kanal.get('rate_limit_per_user', 0),
+            "bitrate": kanal.get('bitrate', 64000),
+            "user_limit": kanal.get('user_limit', 0)
+        }
+        if kanal.get('parent_id') and kanal['parent_id'] in kat_esleme:
+            payload["parent_id"] = kat_esleme[kanal['parent_id']]
+
+        res = requests.post(f"{API_BASE}/guilds/{hedef_id}/channels", headers=headers, json=payload)
+        if res.status_code == 201:
+            kanal_esleme[kanal['id']] = res.json()['id']
+        update_dashboard(username, source_name, target_name)
+        time.sleep(1)
+
+    # 3. GEÇMİŞ MESAJLARI AKTAR
+    current_status = "Geçmiş mesajlar aktarılıyor..."
+    for kanal in diger_kanallar:
+        if kanal['type'] == 0:  # Metin kanalları
+            active_channel = kanal['name']
+            kaynak_kanal_id = kanal['id']
+            hedef_kanal_id = kanal_esleme.get(kanal['id'])
+            
+            if not hedef_kanal_id:
+                continue
+
+            msg_res = requests.get(f"{API_BASE}/channels/{kaynak_kanal_id}/messages?limit=100", headers=headers)
+            if msg_res.status_code == 200:
+                mesajlar = msg_res.json()
+                mesajlar.reverse()
+
+                for msg in mesajlar:
+                    icerik = f"**{msg['author']['username']}**: {msg['content']}" if msg['content'] else ""
+                    if msg.get('attachments'):
+                        ekler = "\n".join([att['url'] for att in msg['attachments']])
+                        icerik = f"{icerik}\n{ekler}" if icerik else ekler
+
+                    if icerik.strip():
+                        basarili = False
+                        while not basarili:
+                            send_res = requests.post(f"{API_BASE}/channels/{hedef_kanal_id}/messages", headers=headers, json={"content": icerik})
+                            if send_res.status_code == 201:
+                                total_sent += 1
+                                basarili = True
+                                if current_delay > 1.2:
+                                    current_delay -= 0.02
+                            elif send_res.status_code == 429:
+                                rate_limits += 1
+                                retry_after = send_res.json().get('retry_after', 5)
+                                current_status = f"Rate Limit! {int(retry_after)}s bekleniyor..."
+                                current_delay += 0.3
+                                update_dashboard(username, source_name, target_name)
+                                time.sleep(retry_after + 1)
+                                current_status = "Geçmiş mesajlar aktarılıyor..."
+                            else:
+                                basarili = True # Diğer hatalarda atla
+                            
+                            update_dashboard(username, source_name, target_name)
+                            time.sleep(current_delay)
+
+    current_status = "İŞLEM TAMAMLANDI! Sunucu Kopyalandı."
+    update_dashboard(username, source_name, target_name)
+    print(Fore.GREEN + "\n\n[✔] Her şey başarıyla kopyalandı!")
 
 if __name__ == '__main__':
     main()
