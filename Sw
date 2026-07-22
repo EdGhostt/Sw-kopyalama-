@@ -32,7 +32,7 @@ def update_dashboard(username, source_name, target_name):
 
     panel = f"""
 {Fore.CYAN}======================================================
-{Fore.GREEN}        --- EdGhost Ultimate Cloner V6 ---
+{Fore.GREEN}        --- EdGhost Ultimate Cloner V7 ---
 {Fore.CYAN}======================================================
 {Fore.YELLOW}  [▶] Çalışma Süresi     : {Fore.WHITE}{uptime}
 {Fore.YELLOW}  [👤] Aktif Hesap        : {Fore.WHITE}{username}
@@ -43,7 +43,7 @@ def update_dashboard(username, source_name, target_name):
 {Fore.YELLOW}  [⚠️] Rate Limit (Engel) : {Fore.RED}{rate_limits} kez
 {Fore.CYAN}======================================================
 {Fore.MAGENTA}  Durum: {current_status}
-{Fore.YELLOW}  [♥] Alternatif tünel bağlantı modu aktif.
+{Fore.YELLOW}  [♥] Kararlı bağlantı modu devrede.
 {Fore.CYAN}======================================================
 """
     sys.stdout.write(panel)
@@ -53,18 +53,15 @@ def main():
     global app_start_time, current_status, active_channel, total_sent, rate_limits, current_delay
     
     clear_screen()
-    print(Fore.GREEN + "--- EdGhost Güvenli Bağlantı Modülü ---")
+    print(Fore.GREEN + "--- EdGhost Tam Donanımlı Sunucu Klonlayıcı ---")
     
     token = input(Fore.YELLOW + "Discord Hesap Token'ınızı Girin: ").strip()
-    
-    # Token başındaki olası tırnak veya boşlukları temizle
     token = token.strip('"').strip("'")
 
     intents = discord.Intents.default()
     intents.message_content = True
     intents.guilds = True
 
-    # Alternatif bağlantı parametresi
     bot = commands.Bot(command_prefix='!', intents=intents, self_bot=True)
 
     @bot.event
@@ -86,7 +83,7 @@ def main():
         hedef = bot.get_guild(hedef_id)
 
         if not kaynak or not hedef:
-            print(Fore.RED + "[X] Kaynak veya hedef sunucu bulunamadı! Botun her iki sunucuda da olduğuna emin olun.")
+            print(Fore.RED + "[X] Kaynak veya hedef sunucu bulunamadı!")
             await bot.close()
             return
 
@@ -226,11 +223,9 @@ def main():
             await bot.close()
 
     try:
-        # Discord self-bot tünel bağlantısı (Improper token hatasını bypass eder)
-        await bot.start(token, bot=False)
+        bot.run(token, reconnect=True)
     except Exception as e:
-        print(Fore.RED + f"[X] Bağlantı Hatası: {e}")
+        print(Fore.RED + f"[X] Hata: {e}")
 
 if __name__ == '__main__':
-    asyncio.run(main())
- 
+    main()
